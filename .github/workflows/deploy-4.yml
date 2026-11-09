@@ -1,0 +1,60 @@
+name: deploy-4
+on:
+  push:
+    paths: [".github/workflows/deploy-4.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Join chunks, verify, patch
+        run: |
+          cat $(ls .github/upload/p*.txt | sort) | tr -d '\n\r ' | base64 -d | gunzip > /tmp/payload.tar
+          echo "ce329c9c84af1ad8db67b41c91ace6b500667c2f41622624f09fb852ad5ca5fb  /tmp/payload.tar" | sha256sum -c -
+          mkdir -p work && tar -xf /tmp/payload.tar -C work
+          cp index.html /tmp/old.html
+          git show $(git log --diff-filter=A --format=%H -- index.html | tail -1):index.html > /tmp/first.html
+          PATCH="$(cat work/patch.b64)" python3 work/apply.py index.html ea34fb69115a6ab14b94957ee2bead63d13b8754e101c30b3ca6ce5413614db0 7b5208b53d354f0b889e32e60c94171840f54148d3da274f09282c47b6340a7d
+      - name: Tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install -q pillow numpy playwright
+          python -m playwright install --with-deps chromium
+      - name: Rebuild media and fill the page
+        run: cd work && python gen2.py
+      - name: Second pass (latest text + Self Pickup selected screen)
+        run: |
+          cat $(ls .github/upload/e*.txt | sort) | tr -d '\n\r ' | base64 -d | gunzip > /tmp/extra.tar
+          echo "fe2c77590f9b91cbde0e78eeea41644a525fd0b4df6d0deb9118463ba46d2383  /tmp/extra.tar" | sha256sum -c -
+          tar -xf /tmp/extra.tar -C work
+          cd work && python extra.py
+      - name: Commit
+        run: |
+          rm -rf work .github/upload
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "deploy-4: update page" && git push
+      - name: Site
+        run: |
+          mkdir _site
+          tar --exclude=./.git --exclude=./.github --exclude=./_site -cf - . | tar -xf - -C _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
