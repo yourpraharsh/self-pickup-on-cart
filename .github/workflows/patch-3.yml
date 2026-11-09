@@ -1,0 +1,69 @@
+name: patch-3
+on:
+  push:
+    paths: [".github/workflows/patch-3.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch
+        run: |
+          cp 'index.html' /tmp/old.html
+          mkdir -p /tmp/upload && cp -r .github/upload/. /tmp/upload/
+          export PATCH="$(cat $(ls .github/upload/p*.txt | sort) | tr -d '\n\r ' | base64 -d | gunzip)"
+          rm -rf .github/upload
+          cat > /tmp/apply.py <<'PY'
+          import base64, gzip, hashlib, json, os, sys
+          path, old_sha, new_sha = sys.argv[1], sys.argv[2], sys.argv[3]
+          old = open(path, encoding="utf-8").read()
+          assert hashlib.sha256(old.encode()).hexdigest() == old_sha, "old file is not the expected version"
+          changes = json.loads(gzip.decompress(base64.b64decode(os.environ["PATCH"])))
+          spans = []
+          for pre, suf, new in changes:
+              if pre:
+                  assert old.count(pre) == 1, "prefix anchor not unique: " + pre[:60]
+                  p = old.index(pre) + len(pre)
+              else:
+                  p = 0
+              s = old.index(suf, p) if suf else len(old)
+              spans.append((p, s, new))
+          spans.sort()
+          out, last = [], 0
+          for p, s, new in spans:
+              assert p >= last, "overlapping changes"
+              out += [old[last:p], new]; last = s
+          out.append(old[last:])
+          res = "".join(out)
+          assert hashlib.sha256(res.encode()).hexdigest() == new_sha, "result does not match the expected file"
+          open(path, "w", encoding="utf-8").write(res)
+          print("patched", path, len(changes), "changes")
+          PY
+          python3 /tmp/apply.py 'index.html' fb6f0d3271a584c0a0d49150bcf0d2a246158d0b5a9ebce198728bb1067d127f ea34fb69115a6ab14b94957ee2bead63d13b8754e101c30b3ca6ce5413614db0
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "patch-3: update index.html" && git push || echo "nothing to commit"
+      - name: Site
+        run: |
+          mkdir _site
+          tar --exclude=./.git --exclude=./.github --exclude=./_site -cf - . | tar -xf - -C _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
