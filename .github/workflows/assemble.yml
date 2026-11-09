@@ -1,0 +1,47 @@
+name: Assemble and deploy page
+on:
+  push:
+    paths: [".github/workflows/assemble.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Join chunks and verify
+        run: |
+          cat $(ls .github/upload/p*.txt | sort) | tr -d '\n\r ' | base64 -d | gunzip > /tmp/payload.tar
+          echo "b5f006ccf6adaee38f119b7a8e4c14248de0672823da74de82494e58f2d52754  /tmp/payload.tar" | sha256sum -c -
+          mkdir -p work && tar -xf /tmp/payload.tar -C work
+      - name: Tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install -q pillow playwright
+          python -m playwright install --with-deps chromium
+      - name: Build index.html
+        run: cd work && python gen.py
+      - name: Commit
+        run: |
+          rm -rf work .github/upload
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A index.html .github/upload
+          git commit -m "Update page: Cart pickup v2" && git push
+      - name: Site
+        run: mkdir -p _site && cp index.html README.md _site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
