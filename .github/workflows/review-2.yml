@@ -1,0 +1,68 @@
+name: review-2
+on:
+  push:
+    paths: [".github/workflows/review-2.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch
+        env:
+          PATCH: H4sIAAAAAAACA82QT1PCMBDFv8pOz5ZYGP9hqaPD6JWLeqCME5otBNIkk2xBvr0LVYbRi0cumWTf25f97XSabHMxL6Bs+9ldHyZy16ClXChV8KE3Rd4dBJWRMY7KpHHWlUmRXEAyRpLaRDYSW7hDwjJgPeq0qBf2r1YmSyIfh0Jst9terReN7FWuEergFy29rVaDpyyGycq8qmz9Pt68RBHR1KnX1br16WbwYJ3CVKtRlg5ur6/KBEiGBRKHf8yNtGuuBDT8tM55tBh44Of9V1Brgx3sTS5k8R/Q2QVMkzUqcBYioYeslwujua01hzXkwv9kHJP2KQfNH/N8cORSow/jRdoZ5CLhJ6XSMPrQYE33DYNom5Lzw951wIYHeDQGYhUQbQRpFbdKQr4GBG2Blgjnulv/vbzOVLcM4gOmAaU68f1eYcSKtLNFaXPR7EX2Xl7Ob6DDiHvqMyE+gZjNvgDPBsFpTAMAAA==
+        run: |
+          cp 'review/index.html' /tmp/old.html
+          cat > /tmp/apply.py <<'PY'
+          import base64, gzip, hashlib, json, os, sys
+          path, old_sha, new_sha = sys.argv[1], sys.argv[2], sys.argv[3]
+          old = open(path, encoding="utf-8").read()
+          assert hashlib.sha256(old.encode()).hexdigest() == old_sha, "old file is not the expected version"
+          changes = json.loads(gzip.decompress(base64.b64decode(os.environ["PATCH"])))
+          spans = []
+          for pre, suf, new in changes:
+              if pre:
+                  assert old.count(pre) == 1, "prefix anchor not unique: " + pre[:60]
+                  p = old.index(pre) + len(pre)
+              else:
+                  p = 0
+              s = old.index(suf, p) if suf else len(old)
+              spans.append((p, s, new))
+          spans.sort()
+          out, last = [], 0
+          for p, s, new in spans:
+              assert p >= last, "overlapping changes"
+              out += [old[last:p], new]; last = s
+          out.append(old[last:])
+          res = "".join(out)
+          assert hashlib.sha256(res.encode()).hexdigest() == new_sha, "result does not match the expected file"
+          open(path, "w", encoding="utf-8").write(res)
+          print("patched", path, len(changes), "changes")
+          PY
+          python3 /tmp/apply.py 'review/index.html' 904157653d6efa4592a12bae719b549c10bacad9b87a952fbef127d8ce7ffe24 b5882604dadeb336bb876ea672de12cdf1814a4a28fd931165292059bc4c4b99
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "review-2: update review/index.html" && git push || echo "nothing to commit"
+      - name: Site
+        run: |
+          mkdir _site
+          tar --exclude=./.git --exclude=./.github --exclude=./_site -cf - . | tar -xf - -C _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
