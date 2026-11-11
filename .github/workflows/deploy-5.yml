@@ -1,0 +1,60 @@
+name: deploy-5
+on:
+  push:
+    paths: [".github/workflows/deploy-5.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch
+        env:
+          P1: H4sIAAAAAAACA82PwU7DMAyGX8XKuV1WKhigrkgIwREuwKGdUNa4bdo0ieK01d6e9MQeAcmyZPu3/X9VxehYs8kaW7PyfQ5uDgWXoSykLFkCMZy3wYaLwwQkLkAOm6jYZoWA3mMb9/sQHD1yvq7rrlXdJHaNnbhEUp3hc/gahvw5I/8x6E+Zjd8vyxtxQt2mTjXj7NIlfzJWYqrkMUvz+7vbmkEQvsMQj/+ctTBj7HjUsTTWOjToo9/X7RW0XkxIUM832cOh4KJkpwQq5rS4QOjxD+BastnnrowkaomZsAnKmrI2BeE2jNr9/nwAoTVQ4xENgTLwT5CvWU+/AJxr88QBAAA=
+          P2: H4sIAAAAAAACA72V227jNhCGX2XgokAC+KCjbTmumu6ivSnQFO0WKJDkgiJHFhuJZEUqThDk3Tuk7DjZ7ALtTS8sUxzyn9NH6vp64sCJp3vsneSsnbFW7tTGafM8mcLkRt2o7cK6xxZLP2qQCT+otHg82r8RyKWVWlmY73opnvxj5rAzLXM447odOmU3PRpk7owNTs9q6aadVB17OEuyyDxM04ie5+cXfw3WyfqRNimHym04PbC/2DGz4S3rzFk8T3rsptn9fprOcxqeP7+PAOam0Qqf9lK4ZhNH0bfPk9spXE90D0JaPli/mPIyTJXbJil9KpRcUm4XQt6XW3oA+bP2u5vJ3hs/st7BT5/++HMD1vmxaxA46wVog2oKJIwPpCZAOmjlHcKH4RF+0fvvR8fByxUthb8HpBQp1OBvdPzeZ88M8GA0L5NSuV7fTMqroYceue46VIJ5rQ1cGf8PP0wP4fmo5tuFKUf3p0y/EMPXci63Vfn7a7WqhB8pSW+TAqGWO3szAQqBzXa9HsxbDd8IMgd26HXmQdgkS+oz5bClzUOPb3eEpnnjPclrsD2nycvL32hXsYwRa+RsVWG2FiITfBUxLoo6x3XO0kqInK8uL8mh0ZaQOeyM02y5yurlmqdJkvCIVwxp4bKI13GN6ZpkozhLxLizZY9WqlYq6q321W4tmB5bzQTpdeiYT5ZWeoj9augGhwJarSn5RQj7WE5KkLPQlbEFr6HYLpwot/5XHQg4lFYJqXZgBtugJcS87dhZuBmiqFrBqSNwpvSBuvPRx4voZ207dvPXHu/pQBGjweNeukZ72ybgHDQD09KCNdrRTdBQetNgFbIjsGtnw6sCOr4OaupcMyUarQMPv2NmDlcKPh6PiKRrIGiSIp2M3itCRRXdB7OR/G4wYcEFyNofnjEhC/tGthgWDRZ7H1KPjDe+PjWdNqaC9vTFCzloKLwxDJpz/gTRqtZPUAE/cwcVNU/SYblDKtGpWWV4CWj+J0SXRcaWeZEuV3kSrVcpZlVUxJhkaVohwZfnRY5Flb1HNF/zhMWrOBapqFeVYAVnWZWtRBSxAleYx0WeFvH/gCiVViqqFcJOfxHRAMxADaRW3PlO0M4Toh+OiP6MaEK9x16O4ie5txSObI4BLSzy0AT6woThCKdlHYbLF5g9HqE5fPI3sG5bZizl96+5fbm4X0CjpMLsiejA8MERmUjWK7MaCV3OiEdQ2gUULX0sZU0fTtpKgNtXbHsnX0PLpzu5vf0HNRmBHn0HAAA=
+        run: |
+          cat > /tmp/a.py <<'PY'
+          import base64,gzip,hashlib,json,os,re,sys
+          O=lambda f,m='r':open(f,m,encoding='utf-8')
+          H=lambda s:hashlib.sha256(s.encode()).hexdigest()
+          def ap(path,env,o,n):
+           s=O(path).read();assert H(s)==o
+           sp=[]
+           for p,u,t in json.loads(gzip.decompress(base64.b64decode(os.environ[env]))):
+            a=s.index(p)+len(p) if p else 0;assert not p or s.count(p)==1;sp.append((a,s.index(u,a) if u else len(s),t))
+           r,l=[],0
+           for a,b,t in sorted(sp):r+=[s[l:a],t];l=b
+           r=''.join(r+[s[l:]]);assert H(r)==n;return r
+          P=re.compile(r'data:[a-z]+/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+')
+          x=ap('index.html','P1',sys.argv[1],sys.argv[2]);O('index.html','w').write(x)
+          M={hashlib.sha1(m.encode()).hexdigest():m for m in P.findall(x)}
+          y=re.sub(r'@@R:([0-9a-f]{40})@@',lambda m:M[m.group(1)],ap('review/index.html','P2',sys.argv[3],sys.argv[4]))
+          assert H(P.sub('@@M@@',y))==sys.argv[5];O('review/index.html','w').write(y)
+          PY
+          python3 /tmp/a.py b814c99e54e7e415e7a4e2c04201aed461b4200dba8cfab5293a524e2004c6c6 136fa80d1b555bf3509d9db640ea80e919ca0c56a19d19bdb883307878a06473 b5882604dadeb336bb876ea672de12cdf1814a4a28fd931165292059bc4c4b99 c66bc62dfcd9fe12663c6d3128a3b426a925b0c8dc4e684b10d9f0817dfa6e1f 4a1dad1b8e472bafbe873802bed542022e86c4402864b4003f63dfabe8876055
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "deploy-5" && git push
+      - name: Site
+        run: |
+          mkdir _site
+          tar --exclude=./.git --exclude=./.github --exclude=./_site -cf - . | tar -xf - -C _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
