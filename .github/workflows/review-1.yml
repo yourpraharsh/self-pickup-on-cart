@@ -1,0 +1,43 @@
+name: review-1
+on:
+  push:
+    paths: [".github/workflows/review-1.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build review page
+        run: |
+          cat $(ls .github/upload/p*.txt | sort) | tr -d '\n\r ' | base64 -d | gunzip > /tmp/payload.tar
+          echo "81cb0b16db4be874ff85e9d40482c101b2b3e37a00640cc9cb1493bf5e938a8a  /tmp/payload.tar" | sha256sum -c -
+          mkdir -p work && tar -xf /tmp/payload.tar -C work
+          cd work && python3 fill.py
+      - name: Commit
+        run: |
+          rm -rf work .github/upload
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "review-1: add leadership review page" && git push
+      - name: Site
+        run: |
+          mkdir _site
+          tar --exclude=./.git --exclude=./.github --exclude=./_site -cf - . | tar -xf - -C _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
