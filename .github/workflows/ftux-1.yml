@@ -1,0 +1,27 @@
+name: ftux-1
+on:
+  push:
+    paths: [".github/workflows/ftux-1.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild FTUX and patch both pages
+        run: |
+          cat $(ls .github/upload/f*.txt | sort) | tr -d '\n\r ' | base64 -d | xz -d > /tmp/payload.tar
+          echo "ee5ff5acc7e6c3db417953f167f3d16dfe234322474683b9e1064f56c9776ec7  /tmp/payload.tar" | sha256sum -c -
+          mkdir -p work && tar -xf /tmp/payload.tar -C work
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install -q pillow numpy
+          cd work && python ftux3.py
+      - name: Commit
+        run: |
+          rm -rf work .github/upload
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "ftux-1: FTUX dim leaves with the scale-down" && git push
